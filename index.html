@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vector Databases — Visual Deep Dive</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<style>
+:root{
+  --bg:#020215;--surf:#07071e;--card:#0d0d2c;--bdr:#161645;--bdhi:#28285a;
+  --text:#e0e3f5;--dim:#808498;--mute:#35375a;
+  --blue:#5b8def;--blueg:rgba(91,141,239,.35);--bluedim:rgba(91,141,239,.1);
+  --gold:#f0c040;--goldg:rgba(240,192,64,.35);--golddim:rgba(240,192,64,.09);
+  --teal:#30d9b0;--tealg:rgba(48,217,176,.35);--tealdim:rgba(48,217,176,.09);
+  --purple:#b07af8;--purpleg:rgba(176,122,248,.35);--purpledim:rgba(176,122,248,.09);
+  --coral:#f07868;--coralg:rgba(240,120,104,.35);--coraldim:rgba(240,120,104,.09);
+  --amber:#f09840;--amberdim:rgba(240,152,64,.08);
+  --fd:'Fraunces',Georgia,serif;--fb:'Newsreader',Georgia,serif;--fm:'Fira Code',monospace;
+  --sb:265px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:var(--fb);line-height:1.85;display:flex;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--bdhi);border-radius:3px}
+
+/* ── PROGRESS ── */
+#pgbar{position:fixed;top:0;left:0;height:2px;background:linear-gradient(90deg,var(--blue),var(--teal),var(--purple));width:0%;z-index:2000}
+
+/* ── SIDEBAR ── */
+nav.sb{position:fixed;top:0;left:0;width:var(--sb);height:100vh;background:rgba(7,7,30,.97);border-right:1px solid var(--bdr);overflow-y:auto;z-index:100;display:flex;flex-direction:column;padding-bottom:2rem;backdrop-filter:blur(12px)}
+.sb-logo{padding:1.4rem 1.5rem 1rem;border-bottom:1px solid var(--bdr)}
+.sb-lbl{font-family:var(--fm);font-size:.56rem;color:var(--blue);letter-spacing:.18em;text-transform:uppercase;margin-bottom:.3rem}
+.sb-title{font-family:var(--fd);font-weight:900;font-size:1.05rem;color:var(--text);line-height:1.2}
+.sb-prog{padding:.65rem 1.5rem;border-bottom:1px solid var(--bdr)}
+.sb-plbl{font-family:var(--fm);font-size:.54rem;color:var(--mute);letter-spacing:.1em;text-transform:uppercase}
+.sb-trk{width:100%;height:2px;background:var(--bdr);border-radius:2px;margin-top:.35rem}
+.sb-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--teal));border-radius:2px;width:0%;transition:width .3s}
+.sb-pct{font-family:var(--fm);font-size:.6rem;color:var(--blue);margin-top:.2rem}
+.nb{padding:.4rem 1.5rem}
+.nb-ch{font-family:var(--fm);font-size:.52rem;color:var(--mute);letter-spacing:.12em;text-transform:uppercase;padding:.55rem 0 .2rem}
+a.ni{display:block;padding:.26rem .55rem;margin:.06rem 0;font-family:var(--fb);font-size:.74rem;color:var(--dim);text-decoration:none;border-radius:4px;border-left:2px solid transparent;transition:all .18s;line-height:1.35}
+a.ni:hover{color:var(--text);background:var(--card);border-left-color:var(--bdhi)}
+a.ni.active{color:var(--blue);background:var(--bluedim);border-left-color:var(--blue);font-weight:500}
+
+/* ── MAIN ── */
+main{margin-left:var(--sb);flex:1;min-width:0}
+
+/* ── HERO ── */
+#hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:5rem 3.5rem;position:relative;overflow:hidden;border-bottom:1px solid var(--bdr)}
+#hc{position:absolute;inset:0;width:100%;height:100%}
+.hcont{position:relative;z-index:2;max-width:800px}
+.hlbl{font-family:var(--fm);font-size:.66rem;letter-spacing:.2em;text-transform:uppercase;color:var(--blue);margin-bottom:1.4rem;display:flex;align-items:center;gap:.7rem}
+.hlbl::before{content:'';width:2rem;height:1px;background:var(--blue)}
+.htitle{font-family:var(--fd);font-weight:900;font-size:clamp(2.4rem,5vw,4.8rem);line-height:1.04;color:#fff;margin-bottom:1.4rem;letter-spacing:-.025em}
+.htitle .accent{background:linear-gradient(135deg,var(--blue),var(--teal));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-style:italic}
+.hsub{font-size:1.05rem;color:var(--dim);max-width:580px;line-height:1.75;margin-bottom:2.5rem}
+.hbadges{display:flex;gap:.75rem;flex-wrap:wrap}
+.hbdg{font-family:var(--fm);font-size:.62rem;padding:.32rem .7rem;border:1px solid;border-radius:3px;letter-spacing:.05em}
+.hbdg.b{border-color:rgba(91,141,239,.5);color:var(--blue);background:var(--bluedim)}
+.hbdg.g{border-color:rgba(240,192,64,.5);color:var(--gold);background:var(--golddim)}
+
+/* ── CHAPTER ── */
+.ch{padding:5rem 3.5rem;border-bottom:1px solid var(--bdr);opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+.ch.vis{opacity:1;transform:none}
+.ch-hdr{margin-bottom:3rem}
+.ch-num{font-family:var(--fm);font-size:.6rem;letter-spacing:.2em;text-transform:uppercase;color:var(--mute);margin-bottom:.7rem}
+.ch-num span{color:var(--blue)}
+.ch-t{font-family:var(--fd);font-weight:900;font-size:clamp(1.8rem,3.5vw,3rem);line-height:1.08;color:#fff;letter-spacing:-.015em;margin-bottom:.55rem}
+.ch-sub{font-size:.92rem;color:var(--dim);font-style:italic;max-width:660px}
+
+/* ── SECTION ── */
+.sec{margin-bottom:3.5rem}
+h3.st{font-family:var(--fd);font-weight:600;font-size:1.35rem;color:var(--text);margin-bottom:1rem;padding-bottom:.45rem;border-bottom:1px solid var(--bdr);display:flex;align-items:baseline;gap:.65rem}
+h3.st .sn{font-family:var(--fm);font-size:.58rem;color:var(--blue);padding:.15rem .38rem;border:1px solid var(--blue);border-radius:2px}
+h4.sub{font-family:var(--fd);font-weight:600;font-size:1.05rem;color:var(--dim);margin:1.6rem 0 .55rem}
+
+/* ── TEXT ── */
+p{font-size:.95rem;line-height:1.88;color:var(--text);margin-bottom:1.2rem}
+p:last-child{margin-bottom:0}
+strong{color:#fff;font-weight:600}
+em{color:var(--gold);font-style:italic}
+code{font-family:var(--fm);font-size:.8em;background:var(--card);border:1px solid var(--bdhi);padding:.12em .38em;border-radius:3px;color:var(--teal)}
+
+/* ── ELI5 ── */
+.eli5{background:linear-gradient(135deg,var(--amberdim),rgba(240,192,64,.04));border:1px solid rgba(240,152,64,.25);border-left:3px solid var(--amber);border-radius:8px;padding:1.25rem 1.5rem;margin:1.8rem 0;position:relative}
+.eli5-lbl{font-family:var(--fm);font-size:.56rem;letter-spacing:.15em;text-transform:uppercase;color:var(--amber);margin-bottom:.55rem}
+.eli5 p{color:rgba(224,227,245,.85);margin-bottom:.5rem;font-size:.92rem}
+.eli5 p:last-child{margin-bottom:0}
+.eli5 .analogy{font-size:1rem;color:var(--amber);font-style:italic;font-weight:500}
+
+/* ── CALLOUTS ── */
+.box{border-radius:7px;padding:1.15rem 1.4rem;margin:1.6rem 0;border:1px solid;position:relative}
+.bx-lbl{font-family:var(--fm);font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:.5rem}
+.box p{margin-bottom:.5rem;font-size:.9rem}
+.box p:last-child{margin-bottom:0}
+.box.ins{background:var(--golddim);border-color:rgba(240,192,64,.22)}.box.ins .bx-lbl{color:var(--gold)}
+.box.prod{background:var(--tealdim);border-color:rgba(48,217,176,.22)}.box.prod .bx-lbl{color:var(--teal)}
+.box.warn{background:var(--coraldim);border-color:rgba(240,120,104,.22)}.box.warn .bx-lbl{color:var(--coral)}
+.box.res{background:var(--purpledim);border-color:rgba(176,122,248,.22)}.box.res .bx-lbl{color:var(--purple)}
+
+/* ── MATH ── */
+.math{font-family:var(--fm);background:rgba(5,5,25,.95);border:1px solid var(--bdhi);border-left:3px solid var(--purple);padding:1.3rem 1.8rem;border-radius:5px;margin:1.4rem 0;font-size:.82rem;overflow-x:auto;color:#cbbdfa;line-height:2.2}
+.math-lbl{font-size:.56rem;color:var(--purple);text-transform:uppercase;letter-spacing:.14em;margin-bottom:.55rem;display:block}
+.mc{color:var(--mute);font-size:.78em;margin-left:1em}
+
+/* ── CODE ── */
+pre{margin:1.4rem 0;border-radius:7px;border:1px solid var(--bdhi);overflow-x:auto}
+pre code{background:transparent;border:none;padding:0;font-size:.79rem;line-height:1.65}
+.clbl{font-family:var(--fm);font-size:.54rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);background:var(--card);padding:.28rem .9rem;border-bottom:1px solid var(--bdr);border-radius:7px 7px 0 0;display:block}
+
+/* ── DEMO WRAPPER ── */
+.demo{background:linear-gradient(135deg,rgba(10,10,35,.98),rgba(6,6,22,.98));border:1px solid var(--bdhi);border-radius:12px;padding:1.6rem;margin:2rem 0;position:relative;box-shadow:0 0 50px rgba(91,141,239,.07),inset 0 1px 0 rgba(255,255,255,.04)}
+.demo::before{content:'▶  INTERACTIVE DEMO';font-family:var(--fm);font-size:.54rem;color:var(--teal);letter-spacing:.15em;display:inline-block;padding:.28rem .65rem;background:var(--tealdim);border:1px solid rgba(48,217,176,.3);border-radius:3px;margin-bottom:1rem}
+.demo-title{font-family:var(--fd);font-weight:600;font-size:1.1rem;color:#fff;margin-bottom:.35rem}
+.demo-desc{font-size:.82rem;color:var(--dim);margin-bottom:1.2rem}
+canvas.demo-cv{display:block;background:rgba(3,3,18,.8);border-radius:8px;border:1px solid var(--bdr);width:100%}
+.demo-ctrl{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:1rem}
+.dbtn{font-family:var(--fm);font-size:.72rem;padding:.45rem 1.1rem;border-radius:5px;border:1px solid;cursor:pointer;transition:all .2s;letter-spacing:.05em}
+.dbtn.primary{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 0 18px var(--blueg)}
+.dbtn.primary:hover{background:#7ba5ff;box-shadow:0 0 28px var(--blueg)}
+.dbtn.ghost{background:transparent;border-color:var(--bdhi);color:var(--dim)}
+.dbtn.ghost:hover{border-color:var(--blue);color:var(--blue)}
+.dslider-wrap{display:flex;align-items:center;gap:.6rem;flex:1;min-width:200px}
+.dslider-lbl{font-family:var(--fm);font-size:.65rem;color:var(--dim);white-space:nowrap}
+.dslider-val{font-family:var(--fm);font-size:.72rem;color:var(--gold);min-width:40px;text-align:right}
+input[type=range]{flex:1;accent-color:var(--blue);cursor:pointer;height:4px}
+.demo-msg{font-family:var(--fm);font-size:.76rem;color:var(--gold);min-height:1.2em;margin-top:.6rem;padding:.4rem .7rem;background:var(--golddim);border-radius:4px;border:1px solid rgba(240,192,64,.2)}
+
+/* ── TABLES ── */
+.tw{overflow-x:auto;margin:1.4rem 0}
+table{width:100%;border-collapse:collapse;font-size:.81rem}
+th{font-family:var(--fm);font-size:.56rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);text-align:left;padding:.65rem .9rem;background:var(--card);border-bottom:2px solid var(--bdhi);white-space:nowrap}
+td{padding:.65rem .9rem;border-bottom:1px solid var(--bdr);color:var(--text);vertical-align:top;line-height:1.5}
+tr:hover td{background:rgba(255,255,255,.015)}
+.tag{display:inline-block;font-family:var(--fm);font-size:.6rem;padding:.1rem .35rem;border-radius:2px;font-weight:500;white-space:nowrap}
+.tb{background:var(--bluedim);color:var(--blue);border:1px solid rgba(91,141,239,.3)}
+.tg{background:var(--golddim);color:var(--gold);border:1px solid rgba(240,192,64,.3)}
+.tt{background:var(--tealdim);color:var(--teal);border:1px solid rgba(48,217,176,.3)}
+.tc{background:var(--coraldim);color:var(--coral);border:1px solid rgba(240,120,104,.3)}
+.tp{background:var(--purpledim);color:var(--purple);border:1px solid rgba(176,122,248,.3)}
+
+/* ── PARAMS ── */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:.9rem;margin:1.4rem 0}
+.pcard{background:var(--card);border:1px solid var(--bdr);border-radius:7px;padding:.9rem;transition:border-color .2s}
+.pcard:hover{border-color:var(--bdhi)}
+.pname{font-family:var(--fm);font-size:.7rem;color:var(--teal);margin-bottom:.25rem}
+.pval{font-family:var(--fm);font-size:.95rem;color:#fff;font-weight:500;margin-bottom:.25rem}
+.pdesc{font-size:.73rem;color:var(--dim);line-height:1.5}
+
+/* ── DB CARDS ── */
+.dbgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1.1rem;margin:1.4rem 0}
+.dbc{background:var(--card);border:1px solid var(--bdr);border-radius:9px;padding:1.3rem;transition:border-color .2s,box-shadow .2s}
+.dbc:hover{border-color:var(--bdhi);box-shadow:0 0 30px rgba(91,141,239,.06)}
+.dbc-h{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.55rem}
+.dbn{font-family:var(--fd);font-weight:700;font-size:1.1rem;color:#fff}
+.dbline{font-size:.73rem;color:var(--dim);font-style:italic;margin-bottom:.8rem}
+.dbspecs{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.8rem}
+.dbs-l{font-family:var(--fm);font-size:.54rem;color:var(--mute);text-transform:uppercase;letter-spacing:.09em}
+.dbs-v{font-size:.73rem;color:var(--text);margin-top:.1rem}
+.dbv{font-size:.73rem;color:var(--dim);border-top:1px solid var(--bdr);padding-top:.65rem;margin-top:.45rem}
+.dbv strong{color:var(--gold)}
+
+/* ── STAT BOXES ── */
+.srow{display:flex;gap:1.1rem;margin:1.4rem 0;flex-wrap:wrap}
+.sbox{flex:1;min-width:120px;background:var(--card);border:1px solid var(--bdr);border-radius:7px;padding:.85rem;text-align:center}
+.sv{font-family:var(--fd);font-weight:700;font-size:1.45rem;color:var(--blue);line-height:1;margin-bottom:.22rem}
+.sl{font-family:var(--fm);font-size:.54rem;color:var(--mute);text-transform:uppercase;letter-spacing:.1em;line-height:1.4}
+
+/* ── FLOW ── */
+.flow{display:flex;align-items:center;flex-wrap:wrap;gap:0;margin:1.4rem 0}
+.fstep{background:var(--card);border:1px solid var(--bdr);border-radius:6px;padding:.6rem .85rem;font-size:.74rem;color:var(--text);text-align:center;min-width:100px}
+.fl{font-family:var(--fm);font-size:.5rem;color:var(--mute);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.18rem}
+.farrow{color:var(--bdhi);font-size:1rem;padding:0 .18rem;flex-shrink:0}
+
+/* ── CHECKLIST ── */
+ul.cl{list-style:none;margin:1rem 0}
+ul.cl li{padding:.42rem 0 .42rem 1.5rem;position:relative;font-size:.87rem;color:var(--text);border-bottom:1px solid var(--bdr);line-height:1.6}
+ul.cl li:last-child{border-bottom:none}
+ul.cl li::before{content:'▸';position:absolute;left:0;color:var(--teal);font-size:.66rem;top:.55rem}
+
+/* ── DIAGRAM WRAP ── */
+.dw{margin:1.8rem 0;background:var(--surf);border:1px solid var(--bdr);border-radius:9px;padding:1.4rem;overflow:hidden}
+.dcap{font-family:var(--fm);font-size:.6rem;color:var(--mute);text-align:center;margin-top:.7rem;letter-spacing:.04em}
+
+/* ── QUIZ ── */
+.quiz-step{display:none}.quiz-step.active{display:block}
+.quiz-q{font-family:var(--fd);font-size:1.15rem;color:#fff;margin-bottom:1.1rem}
+.quiz-opts{display:flex;flex-direction:column;gap:.55rem}
+.qopt{background:var(--card);border:1px solid var(--bdr);border-radius:7px;padding:.8rem 1.1rem;cursor:pointer;font-size:.88rem;color:var(--text);transition:all .2s;text-align:left;font-family:var(--fb)}
+.qopt:hover{border-color:var(--blue);color:var(--blue);background:var(--bluedim)}
+.quiz-result{background:linear-gradient(135deg,var(--golddim),rgba(91,141,239,.06));border:1px solid rgba(240,192,64,.3);border-radius:10px;padding:1.5rem;display:none}
+.quiz-result.show{display:block}
+.qr-lbl{font-family:var(--fm);font-size:.56rem;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-bottom:.6rem}
+.qr-db{font-family:var(--fd);font-weight:900;font-size:2rem;color:#fff;margin-bottom:.4rem}
+.qr-why{font-size:.88rem;color:var(--dim);line-height:1.65}
+.quiz-prog{display:flex;gap:.4rem;margin-bottom:1.2rem}
+.qp-dot{width:8px;height:8px;border-radius:50%;background:var(--bdr);transition:all .3s}
+.qp-dot.done{background:var(--blue)}
+.qp-dot.curr{background:var(--teal);box-shadow:0 0 8px var(--tealg)}
+
+@media(max-width:900px){nav.sb{transform:translateX(-100%)}main{margin-left:0}.ch{padding:3rem 1.5rem}#hero{padding:4rem 1.5rem}}
+</style>
+</head>
+<body>
+<div id="pgbar"></div>
+
+<!-- ═══ SIDEBAR ═══ -->
+<nav class="sb">
+  <div class="sb-logo"><div class="sb-lbl">Visual Reference</div><div class="sb-title">Vector Databases</div></div>
+  <div class="sb-prog"><div class="sb-plbl">Reading Progress</div><div class="sb-trk"><div class="sb-fill" id="sbf"></div></div><div class="sb-pct" id="sbp">0%</div></div>
+  <div class="nb">
+    <div class="nb-ch">§ I — Foundations</div>
+    <a href="#ch1" class="ni" data-t="ch1">Foundations</a>
+    <a href="#s-embed" class="ni" data-t="s-embed">Embeddings Explained</a>
+    <a href="#s-geo" class="ni" data-t="s-geo">Geometry of Meaning</a>
+    <a href="#s-curse" class="ni" data-t="s-curse">Curse of Dimensionality</a>
+    <a href="#demo-space" class="ni" data-t="demo-space">↳ Demo: Semantic Space</a>
+    <div class="nb-ch">§ II — Storage Engine</div>
+    <a href="#ch2" class="ni" data-t="ch2">Storage Engine</a>
+    <a href="#s-raw" class="ni" data-t="s-raw">Raw Vector Layout</a>
+    <a href="#demo-storage" class="ni" data-t="demo-storage">↳ Demo: Storage Calc</a>
+    <a href="#s-seg" class="ni" data-t="s-seg">Segment Architecture</a>
+    <div class="nb-ch">§ III — Index Architectures</div>
+    <a href="#ch3" class="ni" data-t="ch3">Index Architectures</a>
+    <a href="#s-flat" class="ni" data-t="s-flat">Flat Index</a>
+    <a href="#s-hnsw" class="ni" data-t="s-hnsw">HNSW</a>
+    <a href="#demo-hnsw" class="ni" data-t="demo-hnsw">↳ Demo: HNSW Search</a>
+    <a href="#s-ivf" class="ni" data-t="s-ivf">IVF Clusters</a>
+    <a href="#demo-ivf" class="ni" data-t="demo-ivf">↳ Demo: nprobe Explorer</a>
+    <a href="#s-diskann" class="ni" data-t="s-diskann">DiskANN / LSH</a>
+    <div class="nb-ch">§ IV — Distance Metrics</div>
+    <a href="#ch4" class="ni" data-t="ch4">Distance Metrics</a>
+    <a href="#demo-dist" class="ni" data-t="demo-dist">↳ Demo: Metric Sandbox</a>
+    <div class="nb-ch">§ V — Quantization</div>
+    <a href="#ch5" class="ni" data-t="ch5">Quantization</a>
+    <a href="#demo-quant" class="ni" data-t="demo-quant">↳ Demo: Compressor</a>
+    <div class="nb-ch">§ VI — VDB Landscape</div>
+    <a href="#ch6" class="ni" data-t="ch6">VDB Compendium</a>
+    <div class="nb-ch">§ VII — Production RAG</div>
+    <a href="#ch7" class="ni" data-t="ch7">Production RAG</a>
+    <a href="#s-chunk" class="ni" data-t="s-chunk">Chunking</a>
+    <a href="#s-hybrid" class="ni" data-t="s-hybrid">Hybrid Search</a>
+    <a href="#s-filt" class="ni" data-t="s-filt">Metadata Filtering</a>
+    <a href="#s-rr" class="ni" data-t="s-rr">Re-ranking</a>
+    <div class="nb-ch">§ VIII — Decision</div>
+    <a href="#ch8" class="ni" data-t="ch8">Decision Framework</a>
+    <a href="#demo-quiz" class="ni" data-t="demo-quiz">↳ Demo: VDB Picker Quiz</a>
+  </div>
+</nav>
+
+<!-- ═══ MAIN ═══ -->
+<main>
+
+<!-- ────── HERO ────── -->
+<section id="hero">
+  <canvas id="hc"></canvas>
+  <div class="hcont">
+    <div class="hlbl">Staff Engineer Reference — Visual + Research Depth</div>
+    <h1 class="htitle">Vector Databases<br><span class="accent">Internals &amp; Architecture</span></h1>
+    <p class="hsub">From "what is a vector?" to billion-scale DiskANN — every concept explained simply AND deeply. Interactive demos let you feel how each algorithm works, not just read about it.</p>
+    <div class="hbadges">
+      <span class="hbdg b">8 Chapters</span>
+      <span class="hbdg b">7 Interactive Demos</span>
+      <span class="hbdg g">Beginner → Staff Level</span>
+      <span class="hbdg g">Production RAG Patterns</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 1: FOUNDATIONS
+═══════════════════════════════════ -->
+<section class="ch" id="ch1">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 01</span> — The Fundamentals</div>
+    <h2 class="ch-t">Foundations: The Mathematics of Meaning</h2>
+    <p class="ch-sub">What vectors are, why they encode semantics geometrically, and why traditional databases cannot solve this problem</p>
+  </div>
+
+  <div class="sec" id="s-embed">
+    <h3 class="st"><span class="sn">1.1</span> What Is a Vector Embedding?</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Think of it like GPS coordinates — but for meaning, not location."</p>
+      <p>GPS gives every place on Earth two numbers (latitude, longitude). Vector embeddings give every piece of text thousands of numbers. Words with similar meanings end up at similar "coordinates." <strong>Cat</strong> and <strong>dog</strong> live close together. <strong>Cat</strong> and <strong>skyscraper</strong> live far apart. A vector database is just a system that can quickly find the "closest addresses" to any query.</p>
+    </div>
+    <p>A vector embedding is a learned function mapping a discrete object — a sentence, product, image, gene sequence — to a point in continuous high-dimensional real space ℝ<sup>d</sup>. The critical property is <strong>semantic preservation</strong>: objects that are conceptually similar map to geometrically proximate points. This emerges from training on contrastive objectives (InfoNCE loss) that push similar pairs closer and dissimilar pairs apart.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Model</th><th>Dims</th><th>Bytes/vec (fp32)</th><th>Best For</th></tr></thead>
+        <tbody>
+          <tr><td><code>text-embedding-3-large</code></td><td>3072</td><td>12,288</td><td>Highest quality, multilingual</td></tr>
+          <tr><td><code>text-embedding-3-small</code></td><td>1536</td><td>6,144</td><td>Cost/quality balance, Matryoshka</td></tr>
+          <tr><td><code>BAAI/bge-m3</code></td><td>1024</td><td>4,096</td><td>Open-source, sparse+dense</td></tr>
+          <tr><td><code>snowflake-arctic-embed-l</code></td><td>1024</td><td>4,096</td><td>Retrieval-tuned, MTEB leader</td></tr>
+          <tr><td><code>all-MiniLM-L6-v2</code></td><td>384</td><td>1,536</td><td>Lightweight, local prototyping</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- DEMO 1: Semantic Space Explorer -->
+  <div class="demo" id="demo-space">
+    <div class="demo-title">Semantic Space Explorer</div>
+    <div class="demo-desc">Words projected to 2D from their embedding space. <strong>Click any word</strong> to highlight its nearest semantic neighbors. Notice how meaning creates geometry.</div>
+    <canvas class="demo-cv" id="cv-space" height="320"></canvas>
+    <div class="demo-ctrl">
+      <button class="dbtn ghost" onclick="resetSpace()">Reset</button>
+      <span style="font-family:var(--fm);font-size:.68rem;color:var(--dim)">Click a word to see its semantic neighbors</span>
+    </div>
+    <div class="demo-msg" id="space-msg">Click any word to explore semantic relationships →</div>
+  </div>
+
+  <div class="sec" id="s-geo">
+    <h3 class="st"><span class="sn">1.2</span> The Geometry of Semantic Space</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Cosine similarity measures the <em>angle</em> between two arrows. L2 distance measures how far apart their tips are."</p>
+      <p>Imagine two arrows from the origin. <strong>Cosine similarity</strong> = how much they point in the same direction (doesn't care how long the arrows are). <strong>L2 distance</strong> = the straight-line gap between their tips (cares about length). For text embeddings, cosine is standard because we care about direction of meaning, not magnitude.</p>
+    </div>
+    <div class="math">
+      <span class="math-lbl">Core Distance Functions</span>
+      L2 Euclidean:    d(x,y) = √Σᵢ(xᵢ−yᵢ)² = ‖x−y‖₂<br>
+      Cosine:          cos(x,y) = (x·y) / (‖x‖·‖y‖)  ∈ [−1, 1]<br>
+      Inner Product:   IP(x,y)  = Σᵢ xᵢyᵢ<br><br>
+      KEY EQUIVALENCE (unit vectors): ‖x−y‖² = 2 − 2cos(x,y)<br>
+      ∴ on the unit hypersphere, L2 ranking ≡ Cosine ranking ≡ IP ranking
+    </div>
+    <div class="box ins">
+      <div class="bx-lbl">💡 Key Insight</div>
+      <p>Most embedding models normalize output vectors to unit length. Verify with <code>np.allclose(np.linalg.norm(emb, axis=1), 1.0)</code>. If true, L2, cosine, and inner product produce <em>identical ranking</em> — they are mathematically equivalent. The silent production bug is using a different metric at query time than at index build time. This degrades recall by 20–40% with zero error messages.</p>
+    </div>
+  </div>
+
+  <div class="sec" id="s-curse">
+    <h3 class="st"><span class="sn">1.3</span> The Curse of Dimensionality</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Imagine finding your nearest neighbor in a 1D city (easy — just left or right). Now in 2D (harder). Now in 1536D. Everyone is roughly the same distance away."</p>
+      <p>In high dimensions, the concept of "nearest neighbor" breaks down — all points become nearly equidistant. This makes traditional spatial indexes (like KD-trees, which work great for 2D maps) completely useless for 1536-dimensional embedding vectors. That's why we need special <strong>Approximate Nearest Neighbor (ANN)</strong> algorithms.</p>
+    </div>
+    <p>Formally (Beyer et al., 1999): for i.i.d. data with sub-Gaussian tails, <code>lim[d→∞] P[(d_max − d_min) / d_min &lt; ε] → 1</code>. Distance variance vanishes. KD-trees are fast for d ≤ 10 but degenerate above d ≈ 20 and provide zero benefit at d = 1536. <strong>Approximate Nearest Neighbor (ANN)</strong> search accepts a tunable probability of missing the true nearest neighbor in exchange for sub-linear query time.</p>
+    <div class="srow">
+      <div class="sbox"><div class="sv">O(nd)</div><div class="sl">Flat search cost<br>per query</div></div>
+      <div class="sbox"><div class="sv">NP-Hard</div><div class="sl">Exact ANN<br>in high-d</div></div>
+      <div class="sbox"><div class="sv">d≤20</div><div class="sl">Where KD-trees<br>still work</div></div>
+      <div class="sbox"><div class="sv">→1</div><div class="sl">d_max/d_min ratio<br>as d→∞</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 2: STORAGE ENGINE
+═══════════════════════════════════ -->
+<section class="ch" id="ch2">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 02</span> — Storage Engine</div>
+    <h2 class="ch-t">Storage Engine: How Vectors Live on Disk</h2>
+    <p class="ch-sub">Raw memory layout, byte budgets, segment files, and WAL — the architecture enabling concurrent reads during active ingestion</p>
+  </div>
+
+  <div class="sec" id="s-raw">
+    <h3 class="st"><span class="sn">2.1</span> Raw Vector Layout &amp; Memory Budgets</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Each number in a vector is like a decimal number stored in a file. The more precision you need, the bigger the file. But you can compress them — like JPEG for vectors."</p>
+      <p>A 1536-dimensional vector stored at full precision (fp32) = 6,000 bytes per document. Store 1 million documents = 6 GB of RAM. That's why compression (quantization) exists — you trade a tiny bit of accuracy for 4×, 32×, or even 64× less storage. Use the interactive demo below to see exactly how this scales.</p>
+    </div>
+    <div class="math">
+      <span class="math-lbl">Storage Budget Per Vector (d = 1536)</span>
+      float32:  1536 × 4B = 6,144 B  = 6.0 KB/vector  <span class="mc">// full precision</span><br>
+      float16:  1536 × 2B = 3,072 B  = 3.0 KB/vector  <span class="mc">// 2× smaller</span><br>
+      int8 SQ:  1536 × 1B = 1,536 B  = 1.5 KB/vector  <span class="mc">// 4× smaller, &lt;0.5% recall loss</span><br>
+      BQ 1-bit: 1536 / 8  =   192 B  = 0.2 KB/vector  <span class="mc">// 32× smaller</span><br>
+      PQ m=96:              =    96 B  = 0.1 KB/vector  <span class="mc">// 64× smaller</span>
+    </div>
+  </div>
+
+  <!-- DEMO 2: Storage Calculator -->
+  <div class="demo" id="demo-storage">
+    <div class="demo-title">Storage Budget Calculator</div>
+    <div class="demo-desc">Adjust corpus size and dimensions to see real-time storage requirements across quantization types. Plan your infrastructure before you build it.</div>
+    <canvas class="demo-cv" id="cv-storage" height="260"></canvas>
+    <div class="demo-ctrl">
+      <div class="dslider-wrap">
+        <span class="dslider-lbl">Vectors</span>
+        <input type="range" id="sl-vecs" min="0" max="6" value="3" step="1" oninput="updateStorage()">
+        <span class="dslider-val" id="vl-vecs">1M</span>
+      </div>
+      <div class="dslider-wrap">
+        <span class="dslider-lbl">Dimensions</span>
+        <input type="range" id="sl-dims" min="0" max="5" value="2" step="1" oninput="updateStorage()">
+        <span class="dslider-val" id="vl-dims">1536</span>
+      </div>
+    </div>
+    <div class="demo-msg" id="storage-msg">fp32: 6.0 GB &nbsp;|&nbsp; SQ8: 1.5 GB &nbsp;|&nbsp; BQ: 192 MB &nbsp;|&nbsp; PQ96: 96 MB</div>
+  </div>
+
+  <div class="sec" id="s-seg">
+    <h3 class="st"><span class="sn">2.2</span> Segment-Based Architecture &amp; WAL</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Think of it like a journalist's notebook. New notes go in a fresh page (write buffer). When the page is full, it gets filed permanently (segment). If the power goes out, the filing cabinet has a record of everything you were about to file (WAL)."</p>
+    </div>
+    <div class="flow">
+      <div class="fstep"><div class="fl">Ingest</div>Write Buffer<br>(in-memory)</div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fl">Flush</div>Immutable<br>Segment</div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fl">Background</div>Segment<br>Merge</div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fl">Index Build</div>HNSW/IVF<br>on segment</div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fl">Serve</div>Sealed<br>+ Indexed</div>
+    </div>
+    <p>Immutable segments eliminate write-read contention without locks. The <strong>Write-Ahead Log (WAL)</strong> guarantees durability — every insert is written to the WAL before acknowledgment. On crash, the WAL is replayed. For compliance-sensitive systems (APPR claims, medical, financial), always use <strong>sync WAL flush</strong> — the throughput cost on NVMe SSDs is negligible.</p>
+    <div class="box warn">
+      <div class="bx-lbl">⚠️ Async Flush Risk</div>
+      <p>Async flush modes can lose up to <code>flush_interval_ms</code> of data on sudden process death. In regulated industries, this is not acceptable. Use sync mode and absorb the minor throughput cost.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 3: INDEX ARCHITECTURES
+═══════════════════════════════════ -->
+<section class="ch" id="ch3">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 03</span> — Index Architectures</div>
+    <h2 class="ch-t">Index Architectures: The Engine Room</h2>
+    <p class="ch-sub">Every ANN algorithm explained, from brute force to billion-scale graph indexes. Play with them interactively below.</p>
+  </div>
+
+  <div class="sec" id="s-flat">
+    <h3 class="st"><span class="sn">3.1</span> Flat Index — Exhaustive Search</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Like checking every book in the library, one by one. Slow, but you'll never miss the right book."</p>
+      <p>A flat index computes the exact distance from the query to <em>every single vector</em>. 100% recall, always. For small corpora (&lt;50K vectors) or when GPUs are available, this is often the correct choice. All ANN algorithms are measured against it as the "perfect" baseline.</p>
+    </div>
+    <div class="math">
+      <span class="math-lbl">Flat Index Complexity</span>
+      Time:    O(n × d) per query   <span class="mc">// n=corpus size, d=dimensions</span><br>
+      Recall:  1.0 (exact, by definition)<br>
+      1M vecs, d=1536, AVX-512 CPU (8 cores): ≈ 150–400ms<br>
+      1M vecs, d=1536, A100 GPU:               ≈ 1–5ms
+    </div>
+  </div>
+
+  <div class="sec" id="s-hnsw">
+    <h3 class="st"><span class="sn">3.2</span> HNSW — Hierarchical Navigable Small World</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Imagine asking for directions. You don't check every street. You start by asking 'which country?', then 'which city?', then 'which neighborhood?', then 'which street?' Each level narrows it down fast."</p>
+      <p>HNSW builds a multi-layer graph. The top layer has a few long-range connections (the "highways"). Lower layers have more connections (the "streets"). To search, you start at the top, greedily navigate to the nearest node at that level, then drop down. This is O(log n) instead of O(n). Brilliant.</p>
+    </div>
+    <div class="pgrid">
+      <div class="pcard"><div class="pname">M</div><div class="pval">16</div><div class="pdesc">Connections per node. Higher = better recall, more memory, slower build.</div></div>
+      <div class="pcard"><div class="pname">efConstruction</div><div class="pval">200</div><div class="pdesc">Build-time beam width. Set once — cannot change without full rebuild.</div></div>
+      <div class="pcard"><div class="pname">ef (search)</div><div class="pval">50–200</div><div class="pdesc">Query-time beam width. Tunable live. Main recall-latency dial.</div></div>
+      <div class="pcard"><div class="pname">Complexity</div><div class="pval">O(log n)</div><div class="pdesc">Query time. Construction O(n log n). Memory: vectors + ~128MB graph per 1M nodes.</div></div>
+    </div>
+  </div>
+
+  <!-- DEMO 3: HNSW Search Animator -->
+  <div class="demo" id="demo-hnsw">
+    <div class="demo-title">HNSW Search Animator</div>
+    <div class="demo-desc">Watch the beam search traverse hierarchical layers in real time. The gold star is your query — watch how HNSW navigates from sparse top layers to the dense bottom to find the nearest neighbor.</div>
+    <canvas class="demo-cv" id="cv-hnsw" height="340"></canvas>
+    <div class="demo-ctrl">
+      <button class="dbtn primary" id="hnsw-btn" onclick="runHNSW()">▶ Start Search</button>
+      <button class="dbtn ghost" onclick="resetHNSW()">Reset</button>
+      <div class="dslider-wrap">
+        <span class="dslider-lbl">Speed</span>
+        <input type="range" id="sl-speed" min="1" max="5" value="3">
+        <span class="dslider-val">×3</span>
+      </div>
+    </div>
+    <div class="demo-msg" id="hnsw-msg">Press "Start Search" to animate HNSW beam search →</div>
+  </div>
+
+  <div class="sec" id="s-ivf">
+    <h3 class="st"><span class="sn">3.3</span> IVF — Inverted File Index</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Think of a library divided into sections — Fiction, Science, History. To find a book, you check the most relevant sections (nprobe), not the whole library."</p>
+      <p>IVF first groups all vectors into clusters (sections) using k-means. At query time, it only searches the nearest nprobe clusters. More clusters searched = better recall, but slower. The <strong>nprobe</strong> knob lets you tune this tradeoff at serve time without rebuilding anything.</p>
+    </div>
+  </div>
+
+  <!-- DEMO 4: IVF nprobe Explorer -->
+  <div class="demo" id="demo-ivf">
+    <div class="demo-title">IVF nprobe Explorer</div>
+    <div class="demo-desc">Drag the nprobe slider to see how many clusters get searched. More clusters = higher recall, more compute. The orange star is the query; colored regions are Voronoi cells.</div>
+    <canvas class="demo-cv" id="cv-ivf" height="300"></canvas>
+    <div class="demo-ctrl">
+      <div class="dslider-wrap">
+        <span class="dslider-lbl">nprobe</span>
+        <input type="range" id="sl-nprobe" min="1" max="7" value="1" oninput="updateIVF()">
+        <span class="dslider-val" id="vl-nprobe">1</span>
+      </div>
+    </div>
+    <div class="demo-msg" id="ivf-msg">nprobe=1 → searching 1 cluster → ~72% recall@10</div>
+  </div>
+
+  <div class="sec" id="s-diskann">
+    <h3 class="st"><span class="sn">3.4</span> IVF-PQ, DiskANN &amp; LSH</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version — DiskANN</div>
+      <p class="analogy">"HNSW needs to live entirely in RAM (fast). DiskANN is like HNSW's cousin who lives on a hard drive. Slower per step, but fits billions of vectors on one machine."</p>
+      <p>DiskANN keeps a compressed sketch in RAM for fast navigation, then fetches full-precision vectors from SSD only for the final few candidates. With NVMe SSDs, this means ~5–10 disk reads per query — fast enough for production, cheap enough for billions of vectors.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Index</th><th>Recall</th><th>Speed</th><th>RAM Needed</th><th>Build Time</th><th>Updatable?</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Flat</strong></td><td><span class="tag tt">100%</span></td><td><span class="tag tc">Slow at scale</span></td><td>Full vectors</td><td>Instant</td><td>Yes</td></tr>
+          <tr><td><strong>HNSW</strong></td><td><span class="tag tt">95–99%</span></td><td><span class="tag tt">Fast</span></td><td>Full + graph</td><td>Hours</td><td>Insert only</td></tr>
+          <tr><td><strong>IVF-PQ</strong></td><td><span class="tag tg">85–97%</span></td><td><span class="tag tg">Very fast</span></td><td>PQ codes only</td><td>Hours</td><td>Rebuild</td></tr>
+          <tr><td><strong>DiskANN</strong></td><td><span class="tag tt">95%+</span></td><td><span class="tag tg">Fast (NVMe)</span></td><td>PQ sketch only</td><td>Long</td><td>Limited</td></tr>
+          <tr><td><strong>LSH</strong></td><td><span class="tag tc">60–80%</span></td><td><span class="tag tt">Fast</span></td><td>Hash tables</td><td>Fast</td><td>Yes</td></tr>
+          <tr><td><strong>Annoy</strong></td><td><span class="tag tg">80–90%</span></td><td><span class="tag tt">Fast</span></td><td>Trees</td><td>Medium</td><td><span class="tag tc">No</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="box prod">
+      <div class="bx-lbl">⚙️ DiskANN Rule of Thumb</div>
+      <p>Use DiskANN when: corpus &gt;100M vectors AND RAM &lt;64 GB AND you have NVMe SSDs. Microsoft Research benchmarks: 95%+ recall@10 at 1000+ QPS on <em>1 billion</em> vectors on a single server with 64 GB RAM. HNSW would need &gt;4 TB RAM for the same corpus.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 4: DISTANCE METRICS
+═══════════════════════════════════ -->
+<section class="ch" id="ch4">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 04</span> — Distance Metrics</div>
+    <h2 class="ch-t">Distance Metrics: Measuring Similarity</h2>
+    <p class="ch-sub">The mathematical properties that determine which metric to use — and why getting this wrong silently destroys recall</p>
+  </div>
+  <div class="sec">
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"L2 distance: 'how far apart are these two cities?' Cosine similarity: 'are these two cities in the same direction from me?' Same data, different questions."</p>
+      <p>For most text RAG systems, use <strong>cosine similarity</strong> — it ignores how "big" a vector is and just measures the angle between them. For image features or spatial data, use <strong>L2</strong>. For binary compressed vectors, use <strong>Hamming</strong> distance. The interactive sandbox below lets you feel the difference.</p>
+    </div>
+  </div>
+
+  <!-- DEMO 5: Distance Metric Sandbox -->
+  <div class="demo" id="demo-dist">
+    <div class="demo-title">Distance Metric Sandbox</div>
+    <div class="demo-desc"><strong>Drag the colored dots</strong> around the canvas and watch all three metrics update in real time. Notice how cosine cares about direction (angle), while L2 cares about the straight-line gap.</div>
+    <canvas class="demo-cv" id="cv-dist" height="320"></canvas>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;margin-top:1rem">
+      <div style="background:var(--bluedim);border:1px solid rgba(91,141,239,.3);border-radius:7px;padding:.9rem;text-align:center">
+        <div style="font-family:var(--fm);font-size:.58rem;color:var(--blue);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem">L2 Euclidean</div>
+        <div style="font-family:var(--fd);font-size:1.6rem;color:#fff;font-weight:700" id="v-l2">0.00</div>
+        <div style="font-size:.7rem;color:var(--dim);margin-top:.2rem">straight-line distance</div>
+      </div>
+      <div style="background:var(--golddim);border:1px solid rgba(240,192,64,.3);border-radius:7px;padding:.9rem;text-align:center">
+        <div style="font-family:var(--fm);font-size:.58rem;color:var(--gold);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem">Cosine Similarity</div>
+        <div style="font-family:var(--fd);font-size:1.6rem;color:#fff;font-weight:700" id="v-cos">0.00</div>
+        <div style="font-size:.7rem;color:var(--dim);margin-top:.2rem">angular alignment</div>
+      </div>
+      <div style="background:var(--tealdim);border:1px solid rgba(48,217,176,.3);border-radius:7px;padding:.9rem;text-align:center">
+        <div style="font-family:var(--fm);font-size:.58rem;color:var(--teal);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.3rem">Inner Product</div>
+        <div style="font-family:var(--fd);font-size:1.6rem;color:#fff;font-weight:700" id="v-ip">0.00</div>
+        <div style="font-size:.7rem;color:var(--dim);margin-top:.2rem">dot product</div>
+      </div>
+    </div>
+    <div class="demo-msg" id="dist-msg">Drag the blue or orange dot to update metrics →</div>
+  </div>
+
+  <div class="sec" style="margin-top:2rem">
+    <div class="tw">
+      <table>
+        <thead><tr><th>Metric</th><th>Formula</th><th>Range</th><th>When to Use</th></tr></thead>
+        <tbody>
+          <tr><td><strong>L2 / Euclidean</strong></td><td><code>√Σ(xᵢ−yᵢ)²</code></td><td>[0, ∞)</td><td>Spatial data, non-normalized vecs. Default for FAISS.</td></tr>
+          <tr><td><strong>Cosine</strong></td><td><code>(x·y)/(‖x‖‖y‖)</code></td><td>[−1, 1]</td><td>Text embeddings, standard RAG. Industry default.</td></tr>
+          <tr><td><strong>Inner Product</strong></td><td><code>Σ xᵢyᵢ</code></td><td>(−∞, +∞)</td><td>Pre-normalized vectors, recommendation systems.</td></tr>
+          <tr><td><strong>Hamming</strong></td><td><code>popcount(a XOR b)</code></td><td>[0, d]</td><td>Binary quantized vectors. One CPU instruction per 64 bits.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 5: QUANTIZATION
+═══════════════════════════════════ -->
+<section class="ch" id="ch5">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 05</span> — Quantization</div>
+    <h2 class="ch-t">Quantization: The Art of Compression</h2>
+    <p class="ch-sub">Reducing 6 KB vectors to 96 bytes without destroying geometry — scalar, product, and binary quantization</p>
+  </div>
+
+  <!-- DEMO 6: Quantization Compressor -->
+  <div class="demo" id="demo-quant">
+    <div class="demo-title">Vector Quantization Compressor</div>
+    <div class="demo-desc">A real vector shown as a bar chart. Toggle between quantization modes to see compression in action. The approximation quality is shown alongside the compression ratio.</div>
+    <canvas class="demo-cv" id="cv-quant" height="280"></canvas>
+    <div class="demo-ctrl">
+      <button class="dbtn primary" onclick="setQuant('fp32')" id="qb-fp32">float32</button>
+      <button class="dbtn ghost" onclick="setQuant('sq8')" id="qb-sq8">SQ8 (4×)</button>
+      <button class="dbtn ghost" onclick="setQuant('bq')" id="qb-bq">Binary (32×)</button>
+      <button class="dbtn ghost" onclick="setQuant('pq')" id="qb-pq">PQ (64×)</button>
+    </div>
+    <div class="demo-msg" id="quant-msg">Showing: float32 — original full precision (6144 bytes for d=1536)</div>
+  </div>
+
+  <div class="sec">
+    <h3 class="st"><span class="sn">5.1</span> Scalar Quantization (SQ)</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Like rounding a ruler from millimetre precision to centimetre precision. You lose a tiny bit of accuracy but the ruler fits in your pocket."</p>
+      <p>SQ8 maps each float32 value to an int8 (-128 to 127). 4× smaller. Recall loss is typically &lt;0.5%. Modern CPUs do integer math faster than float math — so it's smaller <em>and</em> faster. The default first step in any storage optimization.</p>
+    </div>
+    <div class="math">
+      <span class="math-lbl">SQ8 Quantize / Dequantize</span>
+      Quantize:    q(v) = round((v − vmin) / (vmax − vmin) × 255) − 128<br>
+      Dequantize:  v̂ = (q + 128) / 255 × (vmax − vmin) + vmin<br>
+      Compression: float32 (4B) → int8 (1B)  →  4× reduction<br>
+      Recall loss: &lt;0.5% at recall@10  (virtually invisible in production)
+    </div>
+  </div>
+
+  <div class="sec">
+    <h3 class="st"><span class="sn">5.2</span> Product Quantization (PQ)</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Describe a person in 4 categories (height, hair, build, clothing) rather than a full-body photo. Less data, but you can still identify them roughly."</p>
+      <p>PQ splits a 1536-dim vector into 96 sub-vectors of 16 dims each. Each sub-vector is matched to the closest entry in a small codebook (256 entries). The result: one byte per sub-vector × 96 = 96 bytes total. That's a 64× compression. Distance is approximated by pre-computed table lookups rather than full dot products.</p>
+    </div>
+    <div class="math">
+      <span class="math-lbl">PQ Mathematics (d=1536, m=96, k*=256)</span>
+      Split:   x → (x¹, x², …, x⁹⁶)  where xⁱ ∈ ℝ¹⁶<br>
+      Encode:  codeᵢ = argmin_j ‖xⁱ − Cⁱ[j]‖²  ∈ {0..255}<br>
+      ADC:     d²(query, x) ≈ Σᵢ T[i][codeᵢ]  where T precomputed per query<br><br>
+      Storage: 1536 × 4B = 6,144B  →  96 × 1B = 96B  (64× compression!)
+    </div>
+  </div>
+
+  <div class="sec">
+    <h3 class="st"><span class="sn">5.3</span> Binary Quantization (BQ)</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Instead of 'the temperature is 72.4°F', just say 'it's warm (1)'. You lose the exact number but keep the essential information."</p>
+      <p>BQ compresses each float to a single bit: positive = 1, negative = 0. 32× smaller than float32. Distance becomes Hamming distance, computed with a single CPU instruction. Works remarkably well with Matryoshka embeddings (OpenAI text-embedding-3): 96% of original quality at 768× less storage!</p>
+    </div>
+    <div class="box ins">
+      <div class="bx-lbl">💡 Matryoshka + BQ = Production Power</div>
+      <p>OpenAI's text-embedding-3 models are trained so the first k dimensions form a valid embedding. This structural property makes BQ much more effective than on random-order dimensions. For large corpora, BQ + truncation (first 256 dims of text-embedding-3-small) achieves 96% of full fp32 quality at &gt;768× less storage. This is a legitimate production strategy.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 6: VDB LANDSCAPE
+═══════════════════════════════════ -->
+<section class="ch" id="ch6">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 06</span> — The Landscape</div>
+    <h2 class="ch-t">Vector Database Compendium</h2>
+    <p class="ch-sub">Eight production vector databases — architecture, storage, filtering strategy, and where each genuinely wins</p>
+  </div>
+  <div class="sec">
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Picking a VDB is like picking a car. A Ferrari (Qdrant) is fast but needs a skilled driver. A Toyota (pgvector) is reliable and you already know how to drive it. A Waymo (Pinecone) drives itself but you can't look under the hood."</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Database</th><th>Index</th><th>Storage</th><th>Filtering</th><th>Scale</th><th>Vibe</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Pinecone</strong></td><td><span class="tb">HNSW+IVF</span></td><td>Proprietary</td><td>Pre+Post</td><td>Billions</td><td>Managed, pricey</td></tr>
+          <tr><td><strong>Qdrant</strong></td><td><span class="tb">HNSW (Rust)</span></td><td>mmap+WAL</td><td>Graph-native</td><td>1B+</td><td>Best filters, fast</td></tr>
+          <tr><td><strong>Weaviate</strong></td><td><span class="tb">HNSW+ACORN</span></td><td>RocksDB</td><td>ACORN</td><td>500M</td><td>Multimodal, GraphQL</td></tr>
+          <tr><td><strong>Milvus</strong></td><td><span class="tp">All types</span></td><td>RocksDB+MinIO</td><td>Pre-filter</td><td>10B+</td><td>Hyperscale, complex</td></tr>
+          <tr><td><strong>Chroma</strong></td><td><span class="tt">HNSW (lib)</span></td><td>SQLite/DuckDB</td><td>Post</td><td>&lt;1M</td><td>Prototyping only</td></tr>
+          <tr><td><strong>pgvector</strong></td><td><span class="tp">HNSW+IVF</span></td><td>PostgreSQL</td><td>Full SQL</td><td>&lt;10M</td><td>Postgres ecosystem</td></tr>
+          <tr><td><strong>Redis VSS</strong></td><td><span class="tb">HNSW+Flat</span></td><td>In-memory</td><td>Tag filter</td><td>&lt;100M</td><td>&lt;1ms latency</td></tr>
+          <tr><td><strong>Cortex Search</strong></td><td><span class="tg">Proprietary</span></td><td>Snowflake</td><td>SQL native</td><td>Serverless</td><td>If you're in Snowflake</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="dbgrid">
+      <div class="dbc">
+        <div class="dbc-h"><div><div class="dbn">Qdrant</div><div class="dbline">The filterable HNSW specialist</div></div><span class="tag tt">Recommended</span></div>
+        <div class="dbspecs">
+          <div><div class="dbs-l">Index</div><div class="dbs-v">HNSW (Rust)</div></div>
+          <div><div class="dbs-l">Quantization</div><div class="dbs-v">SQ, PQ, BQ native</div></div>
+          <div><div class="dbs-l">Sparse</div><div class="dbs-v">SPLADE native</div></div>
+          <div><div class="dbs-l">Multi-vec</div><div class="dbs-v">Named vectors per point</div></div>
+        </div>
+        <div class="dbv"><strong>Best for:</strong> Production RAG with complex metadata filters. Its graph-native payload filtering avoids the recall penalty every other VDB suffers at low filter selectivity.</div>
+      </div>
+      <div class="dbc" style="border-color:rgba(240,192,64,.3)">
+        <div class="dbc-h"><div><div class="dbn">Snowflake Cortex</div><div class="dbline">Serverless, SQL-native hybrid search</div></div><span class="tag tg">Snowflake Native</span></div>
+        <div class="dbspecs">
+          <div><div class="dbs-l">Search Type</div><div class="dbs-v">Keyword + Semantic</div></div>
+          <div><div class="dbs-l">Embedding</div><div class="dbs-v">Auto-managed</div></div>
+          <div><div class="dbs-l">Index Sync</div><div class="dbs-v">Auto on table change</div></div>
+          <div><div class="dbs-l">API</div><div class="dbs-v">SQL + Python REST</div></div>
+        </div>
+        <div class="dbv"><strong>Best for:</strong> If your data already lives in Snowflake. Zero pipeline overhead, automatic index updates, full SQL filtering with columnar optimizer. The correct call for Snowflake-native architectures.</div>
+      </div>
+      <div class="dbc">
+        <div class="dbc-h"><div><div class="dbn">pgvector</div><div class="dbline">SQL + vectors unified</div></div><span class="tag tb">Postgres</span></div>
+        <div class="dbspecs">
+          <div><div class="dbs-l">Index</div><div class="dbs-v">HNSW (v0.5+) + IVFFlat</div></div>
+          <div><div class="dbs-l">Filtering</div><div class="dbs-v">Full SQL WHERE/JOIN</div></div>
+          <div><div class="dbs-l">Managed</div><div class="dbs-v">Supabase, Neon, RDS</div></div>
+          <div><div class="dbs-l">Scale</div><div class="dbs-v">~5M vectors practical</div></div>
+        </div>
+        <div class="dbv"><strong>Best for:</strong> Existing PostgreSQL stacks needing good-enough vector search with relational joins. Operational simplicity wins over raw performance at moderate scale.</div>
+      </div>
+      <div class="dbc">
+        <div class="dbc-h"><div><div class="dbn">Redis VSS</div><div class="dbline">Sub-millisecond, in-memory</div></div><span class="tag tc">Lowest Latency</span></div>
+        <div class="dbspecs">
+          <div><div class="dbs-l">P50 Latency</div><div class="dbs-v">&lt;1ms</div></div>
+          <div><div class="dbs-l">Max Scale</div><div class="dbs-v">~100M (RAM bounded)</div></div>
+          <div><div class="dbs-l">Persistence</div><div class="dbs-v">RDB + AOF</div></div>
+          <div><div class="dbs-l">Hybrid</div><div class="dbs-v">No</div></div>
+        </div>
+        <div class="dbv"><strong>Best for:</strong> Session-level context (conversation history), real-time personalization, any use case needing &lt;1ms retrieval where corpus fits in memory.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 7: PRODUCTION RAG
+═══════════════════════════════════ -->
+<section class="ch" id="ch7">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 07</span> — Production RAG</div>
+    <h2 class="ch-t">Production RAG Engineering</h2>
+    <p class="ch-sub">What tutorials skip: chunking quality, hybrid search math, filter architectures, re-ranking, and the complete production checklist</p>
+  </div>
+
+  <div class="sec" id="s-chunk">
+    <h3 class="st"><span class="sn">7.1</span> Chunking Strategies</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Chunking is like cutting a steak. Cut it too thick — hard to digest (embedding loses focus). Cut it too thin — loses the flavor (context). The right size depends on your dish."</p>
+      <p>Chunking is more important than VDB selection. Bad chunking = semantically incoherent embeddings = bad recall regardless of how well-tuned your index is. Start with 512-token chunks and 20% overlap. Benchmark. Adjust.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Strategy</th><th>How It Works</th><th>Quality</th><th>Best For</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Fixed-Size</strong></td><td>Every N tokens, K overlap</td><td>⭐⭐</td><td>Baseline, homogeneous docs</td></tr>
+          <tr><td><strong>Semantic</strong></td><td>Split when embedding similarity drops</td><td>⭐⭐⭐⭐</td><td>Long-form articles</td></tr>
+          <tr><td><strong>Hierarchical</strong></td><td>Parent section + child sentence indexed</td><td>⭐⭐⭐⭐⭐</td><td>Dense technical docs</td></tr>
+          <tr><td><strong>Late Chunking</strong></td><td>Encode full doc, pool windows after</td><td>⭐⭐⭐⭐⭐</td><td>Short docs needing global context</td></tr>
+          <tr><td><strong>RAPTOR</strong></td><td>Cluster→summarize→recurse→tree</td><td>⭐⭐⭐⭐⭐</td><td>Multi-granularity queries</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sec" id="s-hybrid">
+    <h3 class="st"><span class="sn">7.2</span> Hybrid Search (BM25 + Dense + RRF)</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Hybrid search is like asking two detectives to find a suspect. Detective BM25 matches exact words. Detective Dense finds similar meaning. Then a judge (RRF) combines their ranked lists into one final ranking."</p>
+      <p>Dense search alone fails for exact codes, product names, and rare terms. BM25 alone fails for paraphrased queries. Combined with RRF fusion: 5–15% better NDCG@10 in most production RAG systems.</p>
+    </div>
+    <div class="math">
+      <span class="math-lbl">Reciprocal Rank Fusion (RRF)</span>
+      RRF(d) = Σᵢ  1 / (k + rank_i(d))   where k=60 (empirically optimal)<br>
+      Weighted: α × 1/(k+rank_dense) + (1−α) × 1/(k+rank_sparse)<br>
+      General RAG: α=0.7  |  Domain-specific (rare terms): α=0.4–0.5
+    </div>
+    <div class="clbl">Python — RRF Fusion</div>
+    <pre><code class="language-python">from collections import defaultdict
+
+def rrf(dense_results, sparse_results, k=60, alpha=0.7):
+    scores = defaultdict(float)
+    for rank, (doc_id, _) in enumerate(dense_results):
+        scores[doc_id] += alpha * (1.0 / (k + rank + 1))
+    for rank, (doc_id, _) in enumerate(sparse_results):
+        scores[doc_id] += (1-alpha) * (1.0 / (k + rank + 1))
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)</code></pre>
+  </div>
+
+  <div class="sec" id="s-filt">
+    <h3 class="st"><span class="sn">7.3</span> Metadata Filtering — Pre, Post, Graph-Native</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Pre-filter: only look at science books, then search them. Post-filter: search all books, then throw away the non-science ones. Graph-native (Qdrant): skip non-science books <em>while</em> walking the graph."</p>
+      <p>Pre-filter works when many documents match (high selectivity). Post-filter works when few documents match. Graph-native works always but needs Qdrant. Getting this wrong is one of the most common reasons production RAG has mysteriously low recall.</p>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Strategy</th><th>Works When</th><th>Fails When</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Pre-filter</strong></td><td>&gt;5% of corpus passes filter</td><td>Low selectivity → HNSW subgraph disconnects → recall collapses</td></tr>
+          <tr><td><strong>Post-filter</strong></td><td>Any selectivity (oversample candidates)</td><td>Very few docs match → return set is empty or too small</td></tr>
+          <tr><td><strong>Graph-native (Qdrant)</strong></td><td>Any selectivity, always correct</td><td>Higher memory for payload indexes — worth it</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sec" id="s-rr">
+    <h3 class="st"><span class="sn">7.4</span> Re-ranking &amp; Production Checklist</h3>
+    <div class="eli5">
+      <div class="eli5-lbl">🧠 The Simple Version</div>
+      <p class="analogy">"Retrieval finds 100 candidates fast (like a librarian finding relevant shelves). Re-ranking reads each book's first page to find the best 5 (the expert). Slower but far more accurate."</p>
+    </div>
+    <div class="flow">
+      <div class="fstep"><div class="fl">Stage 1</div>ANN Retrieval<br>top 100</div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fl">Fusion</div>RRF Hybrid<br>Merge</div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fl">Stage 2</div>Cross-encoder<br>Re-rank</div>
+      <div class="farrow">→</div>
+      <div class="fstep"><div class="fl">Generate</div>LLM with<br>top-5 context</div>
+    </div>
+    <div class="box prod">
+      <div class="bx-lbl">⚙️ Production Checklist — Non-Negotiables</div>
+      <ul class="cl">
+        <li><strong>efConstruction ≥ 200</strong> at build time. Cannot change without full rebuild.</li>
+        <li><strong>Verify normalization:</strong> <code>np.allclose(np.linalg.norm(emb, axis=1), 1.0)</code></li>
+        <li><strong>Recall@10 baseline:</strong> benchmark against flat search on 1K held-out queries. Target: &gt;95%.</li>
+        <li><strong>Batch inserts:</strong> 1000+ vectors per call. Single inserts are 10–100× slower per vector.</li>
+        <li><strong>Warm the index:</strong> 1000 random queries before production traffic. Cold HNSW = 5–10× higher latency.</li>
+        <li><strong>Monitor P99 latency</strong> — spikes during compaction are invisible at P50.</li>
+        <li><strong>WAL sync mode</strong> for compliance-sensitive corpora (APPR, medical, financial).</li>
+        <li><strong>Test hybrid search</strong> — BM25+dense RRF beats vector-only in most domains by 5–15% NDCG@10.</li>
+        <li><strong>Design metadata for query patterns</strong>, not normalization. Denormalize aggressively.</li>
+        <li><strong>Reserve 20–30% HNSW capacity</strong> — recall degrades above ~85% fullness.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════
+     CH 8: DECISION FRAMEWORK
+═══════════════════════════════════ -->
+<section class="ch" id="ch8">
+  <div class="ch-hdr">
+    <div class="ch-num"><span>Chapter 08</span> — Decision Framework</div>
+    <h2 class="ch-t">Decision Framework: Choose Your VDB</h2>
+    <p class="ch-sub">Answer 5 questions about your use case — get a personalized recommendation with justification</p>
+  </div>
+
+  <!-- DEMO 7: VDB Picker Quiz -->
+  <div class="demo" id="demo-quiz">
+    <div class="demo-title">VDB Picker Quiz</div>
+    <div class="demo-desc">5 questions. 30 seconds. A recommendation built from the engineering tradeoffs in this guide — not vendor marketing.</div>
+    <div style="padding:.5rem 0">
+      <div class="quiz-prog" id="qprog">
+        <div class="qp-dot curr" id="qd0"></div>
+        <div class="qp-dot" id="qd1"></div>
+        <div class="qp-dot" id="qd2"></div>
+        <div class="qp-dot" id="qd3"></div>
+        <div class="qp-dot" id="qd4"></div>
+      </div>
+      <div id="qs0" class="quiz-step active">
+        <div class="quiz-q">1. What is your data platform?</div>
+        <div class="quiz-opts">
+          <button class="qopt" onclick="qa(0,'snowflake')">❄️ Snowflake — my data lives there already</button>
+          <button class="qopt" onclick="qa(0,'postgres')">🐘 PostgreSQL — existing relational database</button>
+          <button class="qopt" onclick="qa(0,'none')">🆕 No existing platform — greenfield</button>
+          <button class="qopt" onclick="qa(0,'redis')">⚡ Redis — I need ultra-low latency</button>
+        </div>
+      </div>
+      <div id="qs1" class="quiz-step">
+        <div class="quiz-q">2. How many vectors will you store?</div>
+        <div class="quiz-opts">
+          <button class="qopt" onclick="qa(1,'tiny')">&lt; 100K — small prototype or product catalog</button>
+          <button class="qopt" onclick="qa(1,'small')">100K – 1M — typical enterprise RAG corpus</button>
+          <button class="qopt" onclick="qa(1,'medium')">1M – 100M — large enterprise / multi-tenant</button>
+          <button class="qopt" onclick="qa(1,'large')">&gt; 100M – billion scale</button>
+        </div>
+      </div>
+      <div id="qs2" class="quiz-step">
+        <div class="quiz-q">3. How complex is your metadata filtering?</div>
+        <div class="quiz-opts">
+          <button class="qopt" onclick="qa(2,'none')">No filtering — retrieve any document for any query</button>
+          <button class="qopt" onclick="qa(2,'simple')">Simple filters — date range, single category tag</button>
+          <button class="qopt" onclick="qa(2,'complex')">Complex filters — multiple fields, &lt;1% selectivity</button>
+          <button class="qopt" onclick="qa(2,'sql')">SQL-style — I need JOINs with relational data</button>
+        </div>
+      </div>
+      <div id="qs3" class="quiz-step">
+        <div class="quiz-q">4. What is your latency requirement?</div>
+        <div class="quiz-opts">
+          <button class="qopt" onclick="qa(3,'subms')">&lt; 1ms P50 — real-time, in-memory required</button>
+          <button class="qopt" onclick="qa(3,'fast')">&lt; 20ms P95 — typical interactive RAG</button>
+          <button class="qopt" onclick="qa(3,'relaxed')">&lt; 200ms — batch or async processing fine</button>
+        </div>
+      
+      </div>
+      <div id="qs4" class="quiz-step">
+        <div class="quiz-q">5. How do you want to operate it?</div>
+        <div class="quiz-opts">
+          <button class="qopt" onclick="qa(4,'managed')">&#9729;&#65039; Fully managed cloud — I don't want to touch infrastructure</button>
+          <button class="qopt" onclick="qa(4,'selfhost')">&#128187; Self-hosted — full control, data never leaves my infra</button>
+          <button class="qopt" onclick="qa(4,'either')">&#129335; Either — happy with both, optimise for best fit</button>
+        </div>
+      </div>
+      <div id="quiz-result" class="quiz-result">
+        <div class="qr-lbl">&#127919; Recommended Vector Database</div>
+        <div class="qr-db" id="qr-db">-</div>
+        <div class="qr-why" id="qr-why">-</div>
+        <div style="margin-top:1.2rem"><button class="dbtn ghost" onclick="resetQuiz()">&#x21A9; Start Over</button></div>
+      </div>
+    </div>
+  </div>
+  <div class="sec" style="margin-top:2.5rem">
+    <h3 class="st">The Meta-Rule for Staff Engineers</h3>
+    <div class="box ins">
+      <div class="bx-lbl">&#128161; The Principle That Saves Engineering Hours</div>
+      <p>The best vector database is the one <strong>already in your data platform</strong> - unless its limitations actively harm your use case. Snowflake Cortex, pgvector, and Atlas Vector Search are technically "worse" on raw ANN benchmarks, but they eliminate an entire operational tier. The 3-5% recall gap rarely justifies a new infrastructure component in practice.</p>
+      <p><strong>Reach for a purpose-built VDB only when:</strong> (a) latency must be &lt;5ms, (b) complex filtering breaks recall, (c) scale exceeds your platform limits, or (d) you need sparse+dense hybrid your platform doesn't support.</p>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>Constraint</th><th>Pick</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Already on Snowflake</td><td><span class="tag tg">Cortex Search</span></td><td>Zero pipeline overhead, SQL native, auto-sync</td></tr>
+        <tr><td>Already on PostgreSQL</td><td><span class="tag tb">pgvector</span></td><td>SQL JOINs, familiar ops, managed Supabase/Neon</td></tr>
+        <tr><td>Need &lt;1ms latency</td><td><span class="tag tc">Redis VSS</span></td><td>In-memory HNSW only option at this tier</td></tr>
+        <tr><td>Complex low-selectivity filters</td><td><span class="tag tt">Qdrant</span></td><td>Graph-native payload filtering - no recall penalty</td></tr>
+        <tr><td>Multimodal RAG</td><td><span class="tag tb">Weaviate</span></td><td>Native multi-vector, CLIP modules built in</td></tr>
+        <tr><td>Billions of vectors, on-prem</td><td><span class="tag tp">Milvus+DiskANN</span></td><td>Only OSS with distributed + DiskANN + GPU</td></tr>
+        <tr><td>Fully managed, any scale</td><td><span class="tag tb">Pinecone</span></td><td>Best DevOps UX, transparent scale-out</td></tr>
+        <tr><td>Prototype / &lt;100K vecs</td><td><span class="tag tt">Chroma</span></td><td>Zero config, in-process Python</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+<footer style="padding:3rem;text-align:center;border-top:1px solid var(--bdr);color:var(--mute);font-family:var(--fm);font-size:.6rem;letter-spacing:.08em;line-height:1.8">
+  VECTOR DATABASES - VISUAL + RESEARCH-DEPTH REFERENCE - BEGINNER TO STAFF ENGINEER
+</footer>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded",()=>{document.querySelectorAll("pre code").forEach(el=>hljs.highlightElement(el))});
+(()=>{const cv=document.getElementById("hc"),cx=cv.getContext("2d");let W,H,pts=[];const N=70,R=130;function resize(){W=cv.width=cv.offsetWidth;H=cv.height=cv.offsetHeight}function init(){resize();pts=Array.from({length:N},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,r:Math.random()*1.6+.7}))}function frame(){cx.clearRect(0,0,W,H);for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<R){cx.beginPath();cx.moveTo(pts[i].x,pts[i].y);cx.lineTo(pts[j].x,pts[j].y);cx.strokeStyle="rgba(91,141,239,"+(1-d/R)*.38+")";cx.lineWidth=.65;cx.stroke()}}pts.forEach(p=>{cx.beginPath();cx.arc(p.x,p.y,p.r,0,Math.PI*2);cx.fillStyle="rgba(91,141,239,.7)";cx.fill();p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1});requestAnimationFrame(frame)}window.addEventListener("resize",resize);init();frame()})();
+(()=>{const bar=document.getElementById("pgbar"),fill=document.getElementById("sbf"),pct=document.getElementById("sbp");const obs=new IntersectionObserver(ens=>{ens.forEach(e=>{if(e.isIntersecting)e.target.classList.add("vis")})},{threshold:.08});document.querySelectorAll(".ch").forEach(c=>obs.observe(c));const items=document.querySelectorAll(".ni[data-t]"),pairs=[];items.forEach(i=>{const el=document.getElementById(i.dataset.t);if(el)pairs.push({el,i})});window.addEventListener("scroll",()=>{const s=window.scrollY,t=document.body.scrollHeight-window.innerHeight,p=t>0?Math.round(s/t*100):0;bar.style.width=p+"%";fill.style.width=p+"%";pct.textContent=p+"%";const y=s+window.innerHeight*.28;let a=null;for(let i=pairs.length-1;i>=0;i--){if(pairs[i].el.offsetTop<=y){a=pairs[i];break}}items.forEach(n=>n.classList.remove("active"));if(a)a.i.classList.add("active")},{passive:true})})();
+const WDATA=[{t:"dog",x:.22,y:.28,g:0},{t:"cat",x:.18,y:.38,g:0},{t:"puppy",x:.28,y:.22,g:0},{t:"kitten",x:.14,y:.32,g:0},{t:"pet",x:.24,y:.46,g:0},{t:"Python",x:.62,y:.22,g:1},{t:"code",x:.68,y:.30,g:1},{t:"function",x:.58,y:.16,g:1},{t:"algorithm",x:.73,y:.20,g:1},{t:"data",x:.65,y:.36,g:1},{t:"pizza",x:.28,y:.74,g:2},{t:"pasta",x:.18,y:.66,g:2},{t:"burger",x:.35,y:.80,g:2},{t:"food",x:.22,y:.59,g:2},{t:"cook",x:.13,y:.76,g:2},{t:"Paris",x:.72,y:.74,g:3},{t:"London",x:.79,y:.66,g:3},{t:"Tokyo",x:.65,y:.80,g:3},{t:"city",x:.83,y:.58,g:3},{t:"travel",x:.70,y:.62,g:3},{t:"happy",x:.46,y:.14,g:4},{t:"joy",x:.54,y:.20,g:4},{t:"love",x:.38,y:.22,g:4},{t:"feel",x:.46,y:.07,g:4},{t:"emotion",x:.56,y:.11,g:4}];
+const GCOLS=["#5b8def","#f0c040","#30d9b0","#f07868","#b07af8"],GNAMES=["Animals","Code","Food","Cities","Emotions"];
+let selWord=null;
+function drawSpace(){const cv=document.getElementById("cv-space");if(!cv)return;const cx=cv.getContext("2d");const W=cv.width=cv.offsetWidth,H=cv.height;cx.clearRect(0,0,W,H);WDATA.forEach((w,i)=>{const px=w.x*W,py=w.y*H,col=GCOLS[w.g],isSel=i===selWord,sameGrp=selWord!==null&&w.g===WDATA[selWord].g;if(selWord!==null&&sameGrp&&!isSel){const sw=WDATA[selWord];cx.beginPath();cx.moveTo(sw.x*W,sw.y*H);cx.lineTo(px,py);cx.strokeStyle=col+"60";cx.lineWidth=1.5;cx.setLineDash([4,3]);cx.stroke();cx.setLineDash([])}cx.beginPath();cx.arc(px,py,isSel?8:sameGrp?6:4,0,Math.PI*2);cx.fillStyle=isSel?col:sameGrp?col+"cc":col+(selWord===null?"99":"44");if(isSel||sameGrp){cx.shadowColor=col;cx.shadowBlur=isSel?20:8}cx.fill();cx.shadowBlur=0;cx.font=(isSel?"bold ":"")+(isSel?13:sameGrp?11:10)+"px Newsreader,serif";cx.fillStyle=isSel?"#fff":sameGrp?col:(selWord===null?col+"99":"rgba(80,84,102,.5)");cx.textAlign="center";cx.fillText(w.t,px,py-12)});[0,1,2,3,4].forEach(g=>{const gw=WDATA.filter(w=>w.g===g),lx=Math.max(...gw.map(w=>w.x*W)),ly=Math.min(...gw.map(w=>w.y*H));cx.font="bold 9px Fira Code,monospace";cx.fillStyle=GCOLS[g]+"70";cx.textAlign="right";cx.fillText(GNAMES[g],lx+50,ly-4)});cx.textAlign="left"}
+function initSpace(){const cv=document.getElementById("cv-space");if(!cv)return;cv.addEventListener("click",e=>{const r=cv.getBoundingClientRect(),mx=(e.clientX-r.left)/cv.offsetWidth,my=(e.clientY-r.top)/cv.offsetHeight;let best=null,bd=Infinity;WDATA.forEach((w,i)=>{const d=Math.hypot(w.x-mx,w.y-my);if(d<bd){bd=d;best=i}});selWord=(bd<.07&&selWord!==best)?best:null;document.getElementById("space-msg").textContent=selWord!==null?'"'+WDATA[selWord].t+'" is in '+GNAMES[WDATA[selWord].g]+' cluster - lines show semantic neighbors':"Click any word to explore semantic relationships";drawSpace()});drawSpace()}
+function resetSpace(){selWord=null;drawSpace();document.getElementById("space-msg").textContent="Click any word to explore semantic relationships"}
+window.addEventListener("load",initSpace);window.addEventListener("resize",drawSpace);
+const VCOUNTS=[1e3,1e4,1e5,1e6,1e7,1e8,1e9],VLBLS=["1K","10K","100K","1M","10M","100M","1B"],DVALS=[128,384,768,1536,2048,3072],DLBLS=["128","384","768","1536","2048","3072"];
+function fmt(b){if(b>1e12)return(b/1e12).toFixed(1)+" TB";if(b>1e9)return(b/1e9).toFixed(1)+" GB";if(b>1e6)return(b/1e6).toFixed(1)+" MB";return(b/1e3).toFixed(0)+" KB"}
+function updateStorage(){const vi=+document.getElementById("sl-vecs").value,di=+document.getElementById("sl-dims").value;document.getElementById("vl-vecs").textContent=VLBLS[vi];document.getElementById("vl-dims").textContent=DLBLS[di];const n=VCOUNTS[vi],d=DVALS[di],sizes=[n*d*4,n*d,n*d/8,n*96],lbls=["float32","SQ8 (4x)","Binary (32x)","PQ (64x)"],cols=["#5b8def","#f0c040","#30d9b0","#b07af8"];const cv=document.getElementById("cv-storage");if(!cv)return;const cx=cv.getContext("2d");const W=cv.width=cv.offsetWidth,H=cv.offsetHeight;cx.clearRect(0,0,W,H);const mx=sizes[0],bw=Math.min(90,(W-120)/4-8);sizes.forEach((s,i)=>{const bh=Math.max(4,(s/mx)*(H-70)),bx=60+i*(bw+Math.max(6,(W-120-bw*4)/3)),by=H-44-bh;const grd=cx.createLinearGradient(bx,by,bx,by+bh);grd.addColorStop(0,cols[i]);grd.addColorStop(1,cols[i]+"33");cx.fillStyle=grd;cx.beginPath();cx.rect(bx,by,bw,bh);cx.fill();cx.font="bold 11px Fira Code,monospace";cx.fillStyle="#fff";cx.textAlign="center";cx.fillText(fmt(s),bx+bw/2,Math.max(by-6,14));cx.font="9px Fira Code,monospace";cx.fillStyle=cols[i];cx.fillText(lbls[i],bx+bw/2,H-28)});cx.font="9px Fira Code,monospace";cx.fillStyle="rgba(128,132,152,.5)";cx.textAlign="left";cx.fillText("HNSW graph +"+fmt(n*16*2*4),12,H-6);document.getElementById("storage-msg").textContent=n.toLocaleString()+" vecs x d="+d+" | fp32:"+fmt(sizes[0])+" SQ8:"+fmt(sizes[1])+" BQ:"+fmt(sizes[2])+" PQ:"+fmt(sizes[3])}
+window.addEventListener("load",updateStorage);window.addEventListener("resize",updateStorage);
+const HN={nodes:[{id:0,x:.22,y:.11,l:2},{id:1,x:.50,y:.09,l:2},{id:2,x:.78,y:.12,l:2},{id:3,x:.13,y:.40,l:1},{id:4,x:.31,y:.37,l:1},{id:5,x:.49,y:.39,l:1},{id:6,x:.66,y:.36,l:1},{id:7,x:.83,y:.41,l:1},{id:8,x:.09,y:.73,l:0},{id:9,x:.21,y:.76,l:0},{id:10,x:.33,y:.71,l:0},{id:11,x:.43,y:.79,l:0},{id:12,x:.54,y:.73,l:0},{id:13,x:.63,y:.81,l:0},{id:14,x:.73,y:.73,l:0},{id:15,x:.83,y:.77,l:0},{id:16,x:.92,y:.69,l:0}],edges:{2:[[0,1],[1,2]],1:[[3,4],[4,5],[5,6],[6,7],[3,5],[5,7]],0:[[8,9],[9,10],[10,11],[11,12],[12,13],[13,14],[14,15],[15,16],[9,11],[12,14]]},query:{x:.67,y:.83},steps:[{n:1,msg:"LAYER 2 - Enter at entry point (node 1). Top layer sparse - only 3 nodes."},{n:2,msg:"LAYER 2 - Greedy move: node 2 is closer to query Q."},{n:5,msg:"LAYER 1 - Descend. Node 5 is entry. Medium density layer."},{n:6,msg:"LAYER 1 - Node 6 is closer to Q. Update best candidate."},{n:13,msg:"LAYER 0 - Descend to dense layer. Fine-grained beam search."},{n:14,msg:"LAYER 0 - Beam expands: node 14 is closer! Add to set."},{n:13,msg:"FOUND - Node 13 is nearest neighbor! Only 7/17 nodes visited (59% skipped)"}]};
+let hnswStep=-1,hnswVis=[],hnswTmr=null;
+function getSpd(){return[500,380,260,160,80][Math.min(+document.getElementById("sl-speed").value-1,4)]}
+function drawStar(cx,x,y,col){cx.beginPath();for(let i=0;i<10;i++){const r=i%2?5:12,a=i*Math.PI/5-Math.PI/2;cx.lineTo(x+r*Math.cos(a),y+r*Math.sin(a))}cx.closePath();cx.fillStyle=col;cx.shadowColor=col;cx.shadowBlur=18;cx.fill();cx.shadowBlur=0}
+function drawHNSW(hi=-1){const cv=document.getElementById("cv-hnsw");if(!cv)return;const cx=cv.getContext("2d");const W=cv.width=cv.offsetWidth,H=cv.offsetHeight;cx.clearRect(0,0,W,H);const px=n=>n.x*W,py=n=>n.y*H;[{y:.04,h:.22,t:"Layer 2 - Sparse"},{y:.3,h:.24,t:"Layer 1"},{y:.62,h:.28,t:"Layer 0 - Dense"}].forEach(lb=>{cx.fillStyle="rgba(91,141,239,.02)";cx.fillRect(0,lb.y*H,W,lb.h*H);cx.font="9px Fira Code,monospace";cx.fillStyle="rgba(91,141,239,.3)";cx.textAlign="left";cx.fillText(lb.t,10,lb.y*H+13)});[0,1,2].forEach(l=>{(HN.edges[l]||[]).forEach(([a,b])=>{const na=HN.nodes[a],nb=HN.nodes[b],onPath=hnswVis.includes(na.id)&&hnswVis.includes(nb.id);cx.beginPath();cx.moveTo(px(na),py(na));cx.lineTo(px(nb),py(nb));cx.strokeStyle=onPath?"rgba(240,192,64,.6)":"rgba(35,35,85,.9)";cx.lineWidth=onPath?2:1;cx.stroke()})});if(hnswVis.length>1){for(let i=0;i<hnswVis.length-1;i++){const a=HN.nodes[hnswVis[i]],b=HN.nodes[hnswVis[i+1]];cx.beginPath();cx.moveTo(px(a),py(a));cx.lineTo(px(b),py(b));cx.strokeStyle="rgba(240,192,64,.5)";cx.lineWidth=2;cx.setLineDash([5,3]);cx.stroke();cx.setLineDash([])}}HN.nodes.forEach(n=>{const vis=hnswVis.includes(n.id),curr=n.id===hi,col=n.l===2?"#5b8def":n.l===1?"#7b9dff":"#3a4a8a";if(curr){cx.beginPath();cx.arc(px(n),py(n),17,0,Math.PI*2);cx.fillStyle="rgba(240,192,64,.15)";cx.fill()}cx.beginPath();cx.arc(px(n),py(n),curr?10:vis?7:5.5,0,Math.PI*2);cx.fillStyle=curr?"#f0c040":vis?col+"cc":col+"50";if(curr||vis){cx.shadowColor=curr?"#f0c040":col;cx.shadowBlur=curr?20:8}cx.fill();cx.shadowBlur=0;cx.strokeStyle=curr?"rgba(255,255,255,.8)":vis?col:"#28285a";cx.lineWidth=curr?2:1;cx.stroke();cx.font=(curr?"bold ":"")+"9px Fira Code,monospace";cx.fillStyle=curr?"#f0c040":vis?"rgba(160,180,240,.9)":"rgba(80,84,120,.7)";cx.textAlign="center";cx.fillText(n.id,px(n),py(n)-12)});drawStar(cx,HN.query.x*W,HN.query.y*H,"#30d9b0");cx.font="bold 10px Fira Code,monospace";cx.fillStyle="#30d9b0";cx.textAlign="center";cx.fillText("QUERY",HN.query.x*W,HN.query.y*H+20);cx.textAlign="left"}
+function runHNSW(){if(hnswTmr)return;hnswStep=-1;hnswVis=[];drawHNSW();const btn=document.getElementById("hnsw-btn");btn.disabled=true;btn.textContent="Searching...";function step(){hnswStep++;if(hnswStep>=HN.steps.length){clearTimeout(hnswTmr);hnswTmr=null;btn.disabled=false;btn.textContent="Play Again";document.getElementById("hnsw-msg").textContent="Done! Visited "+hnswVis.length+"/"+HN.nodes.length+" nodes ("+Math.round((1-hnswVis.length/HN.nodes.length)*100)+"% skipped)";return}const s=HN.steps[hnswStep];hnswVis.push(s.n);drawHNSW(s.n);document.getElementById("hnsw-msg").textContent="Step "+(hnswStep+1)+"/"+HN.steps.length+": "+s.msg;hnswTmr=setTimeout(step,getSpd())}step()}
+function resetHNSW(){clearTimeout(hnswTmr);hnswTmr=null;hnswStep=-1;hnswVis=[];drawHNSW();document.getElementById("hnsw-btn").disabled=false;document.getElementById("hnsw-btn").textContent="Play Search";document.getElementById("hnsw-msg").textContent="Press Play to animate HNSW beam search"}
+document.getElementById("sl-speed").addEventListener("input",function(){const lbl=this.closest(".demo-ctrl").querySelector(".dslider-val");if(lbl)lbl.textContent="x"+this.value});
+window.addEventListener("load",drawHNSW);window.addEventListener("resize",()=>drawHNSW());
+const IVF={centers:[{x:.22,y:.28,c:"#5b8def"},{x:.72,y:.22,c:"#b07af8"},{x:.48,y:.55,c:"#30d9b0"},{x:.22,y:.72,c:"#f07868"},{x:.72,y:.68,c:"#f0c040"},{x:.50,y:.18,c:"#60c8f8"},{x:.86,y:.50,c:"#f0a0c0"}],pts:[],query:{x:.52,y:.62}};
+IVF.centers.forEach((c,ci)=>{for(let i=0;i<13;i++){const a=Math.random()*Math.PI*2,r=.06+Math.random()*.1;IVF.pts.push({x:Math.max(.04,Math.min(.96,c.x+Math.cos(a)*r)),y:Math.max(.04,Math.min(.96,c.y+Math.sin(a)*r)),ci})}});
+const RECALL_EST=[0,.72,.84,.90,.94,.97,.98,1];
+function updateIVF(){const np=+document.getElementById("sl-nprobe").value;document.getElementById("vl-nprobe").textContent=np;const cv=document.getElementById("cv-ivf");if(!cv)return;const cx=cv.getContext("2d");const W=cv.width=cv.offsetWidth,H=cv.offsetHeight;cx.clearRect(0,0,W,H);const qx=IVF.query.x*W,qy=IVF.query.y*H,dists=IVF.centers.map((c,i)=>({i,d:Math.hypot(c.x*W-qx,c.y*H-qy)})).sort((a,b)=>a.d-b.d),active=new Set(dists.slice(0,np).map(d=>d.i));IVF.centers.forEach((c,ci)=>{const isA=active.has(ci);cx.beginPath();cx.arc(c.x*W,c.y*H,W*.11,0,Math.PI*2);cx.fillStyle=isA?c.c+"25":c.c+"08";cx.fill();if(isA){cx.strokeStyle=c.c+"90";cx.lineWidth=2;cx.stroke()}});IVF.pts.forEach(p=>{const isA=active.has(p.ci);cx.beginPath();cx.arc(p.x*W,p.y*H,isA?4.5:3,0,Math.PI*2);cx.fillStyle=isA?IVF.centers[p.ci].c+"dd":IVF.centers[p.ci].c+"33";cx.fill()});IVF.centers.forEach((c,ci)=>{const isA=active.has(ci);cx.beginPath();cx.arc(c.x*W,c.y*H,isA?9:6,0,Math.PI*2);cx.fillStyle=c.c;cx.strokeStyle="rgba(255,255,255,.4)";cx.lineWidth=1.5;if(isA){cx.shadowColor=c.c;cx.shadowBlur=14}cx.fill();cx.shadowBlur=0;cx.stroke()});cx.beginPath();for(let i=0;i<10;i++){const r=i%2?5:11,a=i*Math.PI/5-Math.PI/2;cx.lineTo(qx+r*Math.cos(a),qy+r*Math.sin(a))}cx.closePath();cx.fillStyle="#ff8040";cx.shadowColor="#ff8040";cx.shadowBlur=14;cx.fill();cx.shadowBlur=0;cx.font="bold 9px Fira Code,monospace";cx.fillStyle="#ff8040";cx.textAlign="center";cx.fillText("Q",qx,qy-14);const cnt=IVF.pts.filter(p=>active.has(p.ci)).length;cx.font="10px Fira Code,monospace";cx.fillStyle="rgba(128,132,152,.8)";cx.textAlign="right";cx.fillText("nprobe="+np+"/"+IVF.centers.length+" | ~"+cnt+" candidates | recall~"+Math.round(RECALL_EST[Math.min(np,7)]*100)+"%",W-8,H-8);document.getElementById("ivf-msg").textContent="nprobe="+np+" -> "+np+" of "+IVF.centers.length+" clusters -> ~"+cnt+" candidates -> recall@10~"+Math.round(RECALL_EST[Math.min(np,7)]*100)+"%"}
+window.addEventListener("load",updateIVF);window.addEventListener("resize",updateIVF);
+(()=>{const cv=document.getElementById("cv-dist");if(!cv)return;const cx=cv.getContext("2d");let ptA={x:.3,y:.55},ptB={x:.72,y:.32},drag=-1;function getp(e){const r=cv.getBoundingClientRect(),cl=e.touches?e.touches[0]:e;return{x:(cl.clientX-r.left)/cv.offsetWidth,y:(cl.clientY-r.top)/cv.offsetHeight}}function draw(){const W=cv.width=cv.offsetWidth,H=cv.offsetHeight;cx.clearRect(0,0,W,H);const ax=ptA.x*W,ay=ptA.y*H,bx=ptB.x*W,by=ptB.y*H,ox=W/2,oy=H*.7;cx.strokeStyle="rgba(30,30,80,.4)";cx.lineWidth=1;for(let x=0;x<W;x+=50){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke()}for(let y=0;y<H;y+=50){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke()}cx.beginPath();cx.arc(ox,oy,5,0,Math.PI*2);cx.fillStyle="rgba(128,132,152,.4)";cx.fill();cx.setLineDash([4,4]);cx.lineWidth=1;cx.strokeStyle="#5b8def40";cx.beginPath();cx.moveTo(ox,oy);cx.lineTo(ax,ay);cx.stroke();cx.strokeStyle="#f0c04040";cx.beginPath();cx.moveTo(ox,oy);cx.lineTo(bx,by);cx.stroke();cx.setLineDash([]);const a1=Math.atan2(ay-oy,ax-ox),a2=Math.atan2(by-oy,bx-ox);cx.beginPath();cx.arc(ox,oy,50,Math.min(a1,a2),Math.max(a1,a2));cx.strokeStyle="rgba(240,192,64,.6)";cx.lineWidth=2.5;cx.stroke();cx.font="bold 10px Fira Code,monospace";cx.fillStyle="#f0c040aa";cx.textAlign="center";const ma=(a1+a2)/2;cx.fillText("theta",ox+68*Math.cos(ma),oy+68*Math.sin(ma));cx.beginPath();cx.moveTo(ax,ay);cx.lineTo(bx,by);cx.strokeStyle="rgba(91,141,239,.7)";cx.lineWidth=2.5;cx.stroke();[[ax,ay,"#5b8def","A"],[bx,by,"#f0c040","B"]].forEach(([x,y,c,lbl])=>{cx.beginPath();cx.arc(x,y,12,0,Math.PI*2);cx.fillStyle=c+"33";cx.fill();cx.strokeStyle=c;cx.lineWidth=3;cx.shadowColor=c;cx.shadowBlur=15;cx.stroke();cx.shadowBlur=0;cx.font="bold 12px Fira Code,monospace";cx.fillStyle="#fff";cx.textAlign="center";cx.fillText(lbl,x,y+4)});const avx=ptA.x-.5,avy=ptA.y-.5,bvx=ptB.x-.5,bvy=ptB.y-.5,l2v=Math.sqrt((avx-bvx)**2+(avy-bvy)**2)*2.83,dotv=avx*bvx+avy*bvy,cosv=dotv/((Math.sqrt(avx**2+avy**2)||.001)*(Math.sqrt(bvx**2+bvy**2)||.001));document.getElementById("v-l2").textContent=l2v.toFixed(3);document.getElementById("v-cos").textContent=cosv.toFixed(3);document.getElementById("v-ip").textContent=(dotv*8).toFixed(3);document.getElementById("dist-msg").textContent="Drag A or B to update | L2="+l2v.toFixed(3)+" | Cosine="+cosv.toFixed(3)+" | IP="+(dotv*8).toFixed(3)}cv.addEventListener("mousedown",e=>{const p=getp(e);if(Math.hypot(ptA.x-p.x,ptA.y-p.y)<.06)drag=0;else if(Math.hypot(ptB.x-p.x,ptB.y-p.y)<.06)drag=1});cv.addEventListener("mousemove",e=>{if(drag<0)return;const p=getp(e);if(drag===0){ptA.x=Math.max(.05,Math.min(.95,p.x));ptA.y=Math.max(.05,Math.min(.95,p.y))}else{ptB.x=Math.max(.05,Math.min(.95,p.x));ptB.y=Math.max(.05,Math.min(.95,p.y))}draw()});document.addEventListener("mouseup",()=>{drag=-1});cv.addEventListener("touchstart",e=>{e.preventDefault();const p=getp(e);if(Math.hypot(ptA.x-p.x,ptA.y-p.y)<.08)drag=0;else if(Math.hypot(ptB.x-p.x,ptB.y-p.y)<.08)drag=1},{passive:false});cv.addEventListener("touchmove",e=>{e.preventDefault();if(drag<0)return;const p=getp(e);if(drag===0){ptA.x=Math.max(.05,Math.min(.95,p.x));ptA.y=Math.max(.05,Math.min(.95,p.y))}else{ptB.x=Math.max(.05,Math.min(.95,p.x));ptB.y=Math.max(.05,Math.min(.95,p.y))}draw()},{passive:false});cv.addEventListener("touchend",()=>{drag=-1});window.addEventListener("load",draw);window.addEventListener("resize",draw)})();
+const RV=Array.from({length:32},(_,i)=>Math.sin(i*.68)*Math.cos(i*.31)*.88+Math.random()*.18-.09);let cq="fp32";
+function setQuant(m){cq=m;["fp32","sq8","bq","pq"].forEach(id=>{const b=document.getElementById("qb-"+id);if(b)b.className="dbtn "+(id===m?"primary":"ghost")});drawQuant()}
+function drawQuant(){const cv=document.getElementById("cv-quant");if(!cv)return;const cx=cv.getContext("2d");const W=cv.width=cv.offsetWidth,H=cv.offsetHeight;cx.clearRect(0,0,W,H);const n=RV.length,bw=(W-40)/(n+1),mid=H*.52,qv=RV.map((v,i)=>{if(cq==="fp32")return v;if(cq==="sq8")return Math.round(v*127)/127;if(cq==="bq")return v>0?.55:-.55;const g=Math.floor(i/(n/4));return RV.slice(g*Math.ceil(n/4),(g+1)*Math.ceil(n/4)).reduce((a,b)=>a+b,0)/Math.ceil(n/4)});const info={fp32:{lbl:"float32 Full Precision",r:"1x",c:"#5b8def"},sq8:{lbl:"SQ8 Scalar Quantized",r:"4x",c:"#f0c040"},bq:{lbl:"Binary (1 bit/dim)",r:"32x",c:"#30d9b0"},pq:{lbl:"PQ Product Quantized",r:"~64x",c:"#b07af8"}}[cq];RV.forEach((v,i)=>{const x=20+i*(bw+.5),oh=Math.abs(v)*(mid*.88),qh=Math.abs(qv[i])*(mid*.88);cx.fillStyle="rgba(91,141,239,.2)";if(v>0)cx.fillRect(x,mid-oh,bw*.48,oh);else cx.fillRect(x,mid,bw*.48,-(-oh));cx.fillStyle=info.c+(cq!=="fp32"?"cc":"55");if(qv[i]>0)cx.fillRect(x+bw*.5,mid-qh,bw*.45,qh);else cx.fillRect(x+bw*.5,mid,-(-qh),Math.abs(qh))});cx.strokeStyle="rgba(255,255,255,.12)";cx.lineWidth=1;cx.beginPath();cx.moveTo(20,mid);cx.lineTo(W-10,mid);cx.stroke();cx.font="bold 11px Fira Code,monospace";cx.fillStyle=info.c;cx.textAlign="left";cx.fillText(info.lbl,10,16);cx.font="9px Fira Code,monospace";cx.fillStyle="rgba(128,132,152,.7)";cx.fillText("Compression: "+info.r,10,H-6);const msgs={fp32:"float32: full precision, 4 bytes per dimension",sq8:"SQ8: int8 mapped from float. 4x smaller, <0.5% recall loss",bq:"Binary: only sign of each dim. 32x compression. Very fast Hamming distance",pq:"PQ: sub-vector codebook compression. 64x for d=1536"};document.getElementById("quant-msg").textContent=msgs[cq]}
+window.addEventListener("load",drawQuant);window.addEventListener("resize",drawQuant);
+const QA={};
+function qa(q,a){QA[q]=a;const dot=document.getElementById("qd"+q);if(dot)dot.className="qp-dot done";if(q<4){document.getElementById("qs"+q).classList.remove("active");document.getElementById("qs"+(q+1)).classList.add("active");const nd=document.getElementById("qd"+(q+1));if(nd)nd.className="qp-dot curr"}else showResult()}
+function showResult(){for(let i=0;i<5;i++){const s=document.getElementById("qs"+i);if(s)s.classList.remove("active")}const a=QA;let db,why;if(a[0]==="snowflake"){db="Snowflake Cortex Search";why="Your data lives in Snowflake. Cortex Search = zero pipeline overhead, automatic index sync, SQL-native filtering. No new infrastructure."}else if(a[0]==="redis"||a[3]==="subms"){db="Redis VSS";why="Sub-millisecond P50 needs in-memory storage. Redis VSS is the only production VDB at this latency tier. Ensure corpus fits in RAM with AOF persistence."}else if(a[0]==="postgres"||a[2]==="sql"){db="pgvector";why="You have PostgreSQL or need SQL JOINs. pgvector HNSW gives good vector search with full relational power. Add pgai for in-database embeddings. No new infrastructure tier."}else if(a[1]==="large"&&a[4]==="selfhost"){db="Milvus + DiskANN";why="Billion-scale self-hosted: Milvus is the only OSS system with mature distributed arch, GPU support (cuVS), and DiskANN for disk-resident billion-scale indexes."}else if(a[2]==="complex"){db="Qdrant";why="Complex low-selectivity filtering is Qdrant's superpower. Graph-native payload filtering avoids the recall penalty every other VDB suffers at <5% selectivity."}else if(a[1]==="large"||a[1]==="medium"){if(a[4]==="managed"){db="Pinecone";why="Fully managed at scale: Pinecone scales transparently with best DevOps UX. Premium cost, zero infra ops."}else{db="Qdrant (self-hosted)";why="Best general-purpose self-hosted VDB: HNSW in Rust, native filtering, SQ/PQ/BQ, SPLADE sparse, excellent Kubernetes support."}}else if(a[1]==="tiny"){db="Chroma -> pgvector";why="<100K vectors: any VDB works. Start with Chroma for zero-config prototyping. Migrate to pgvector (if Postgres) or Qdrant (production filtering) when ready."}else{db="Qdrant";why="Best general-purpose choice: HNSW in Rust, native payload filtering, all quantization modes, SPLADE sparse, both self-hosted and cloud. The safest default."}document.getElementById("qr-db").textContent=db;document.getElementById("qr-why").textContent=why;const res=document.getElementById("quiz-result");if(res)res.classList.add("show")}
+function resetQuiz(){Object.keys(QA).forEach(k=>delete QA[k]);for(let i=0;i<5;i++){const s=document.getElementById("qs"+i);if(s)s.classList.toggle("active",i===0);const d=document.getElementById("qd"+i);if(d)d.className="qp-dot "+(i===0?"curr":"")}const res=document.getElementById("quiz-result");if(res)res.classList.remove("show")}
+</script></body></html>
